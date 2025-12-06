@@ -339,7 +339,7 @@ function App() {
 
       <footer className="app-footer">
         <div className="footer-content">
-          <p>© 2024 Método de la Secante para Funciones Complejas - Análisis Numérico Avanzado</p>
+          <p>© 2025 Método de la Secante para Funciones Complejas - Análisis Numérico Avanzado</p>
           <p className="footer-info">
             Universidad Mayor de San Andres - Facultad de Ciencias Puras y Naturales - Métodos Numéricos
           </p>
