@@ -153,31 +153,6 @@ Pasos:
           </div>
         ))}
       </div>
-
-      <div className="examples-tips">
-        <h4>
-          <FaInfoCircle />
-          Consejos para usar los ejemplos
-        </h4>
-        <div className="tips-grid">
-          <div className="tip-card">
-            <h5>Para principiantes</h5>
-            <p>Comienza con el <strong>Ejemplo Básico</strong> para entender el método paso a paso.</p>
-          </div>
-          <div className="tip-card">
-            <h5>Para explorar raíces complejas</h5>
-            <p>Usa <strong>Raíces Cúbicas de la Unidad</strong> para ver convergencia a raíces complejas.</p>
-          </div>
-          <div className="tip-card">
-            <h5>Para funciones no lineales</h5>
-            <p>Prueba <strong>Función Seno Compleja</strong> para ver comportamiento oscilatorio.</p>
-          </div>
-          <div className="tip-card">
-            <h5>Para múltiples raíces</h5>
-            <p>Usa <strong>Polinomio de Grado 4</strong> para encontrar diferentes raíces desde distintos puntos iniciales.</p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
