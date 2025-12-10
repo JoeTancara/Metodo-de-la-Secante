@@ -14,6 +14,18 @@ const RootsSearch = ({ onSearch, loading }) => {
     paralelo: true
   });
 
+  // Función segura para convertir a número
+  const safeParseFloat = (value) => {
+    if (typeof value === 'string') {
+      const parsed = parseFloat(value);
+      return isNaN(parsed) ? 0.05 : parsed;
+    }
+    if (typeof value === 'number') {
+      return value;
+    }
+    return 0.05; // valor por defecto
+  };
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     
@@ -23,26 +35,51 @@ const RootsSearch = ({ onSearch, loading }) => {
         ...prev,
         [parent]: {
           ...prev[parent],
-          [child]: parseFloat(value)
+          [child]: safeParseFloat(value)
         }
       }));
     } else {
+      const processedValue = type === 'checkbox' 
+        ? checked 
+        : type === 'number' 
+          ? safeParseFloat(value) 
+          : value;
+      
       setSearchParams(prev => ({
         ...prev,
-        [name]: type === 'checkbox' ? checked : type === 'number' ? parseFloat(value) : value
+        [name]: processedValue
       }));
     }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSearch(searchParams);
+    
+    // Validar y convertir todos los valores antes de enviar
+    const validatedParams = {
+      region: {
+        x_min: safeParseFloat(searchParams.region.x_min),
+        x_max: safeParseFloat(searchParams.region.x_max),
+        y_min: safeParseFloat(searchParams.region.y_min),
+        y_max: safeParseFloat(searchParams.region.y_max)
+      },
+      n_puntos: parseInt(searchParams.n_puntos) || 20,
+      distancia_minima: safeParseFloat(searchParams.distancia_minima),
+      paralelo: Boolean(searchParams.paralelo)
+    };
+    
+    onSearch(validatedParams);
   };
 
   const handlePresetRegion = (preset) => {
     setSearchParams(prev => ({
       ...prev,
-      region: preset
+      region: {
+        x_min: safeParseFloat(preset.x_min),
+        x_max: safeParseFloat(preset.x_max),
+        y_min: safeParseFloat(preset.y_min),
+        y_max: safeParseFloat(preset.y_max)
+      }
     }));
   };
 
@@ -52,6 +89,10 @@ const RootsSearch = ({ onSearch, loading }) => {
     { label: 'Mitad derecha', value: { x_min: 0, x_max: 3, y_min: -1.5, y_max: 1.5 } },
     { label: 'Mitad superior', value: { x_min: -1.5, x_max: 1.5, y_min: 0, y_max: 2 } },
   ];
+
+  // Asegurar que distancia_minima sea número para toFixed
+  const distanciaMinima = safeParseFloat(searchParams.distancia_minima);
+  const nPuntos = parseInt(searchParams.n_puntos) || 20;
 
   return (
     <div className="roots-search">
@@ -130,7 +171,6 @@ const RootsSearch = ({ onSearch, loading }) => {
             <div className="region-visualization">
               <div className="coordinate-plane">
                 <div className="plane-grid">
-                  {/* Grid visualization */}
                   <div className="grid-line horizontal"></div>
                   <div className="grid-line vertical"></div>
                   <div className="origin">(0,0)</div>
@@ -162,14 +202,14 @@ const RootsSearch = ({ onSearch, loading }) => {
                     min="5"
                     max="50"
                     step="5"
-                    value={searchParams.n_puntos}
+                    value={nPuntos}
                     onChange={handleChange}
                     className="slider"
                   />
-                  <span className="slider-value">{searchParams.n_puntos}</span>
+                  <span className="slider-value">{nPuntos}</span>
                 </div>
                 <small className="parameter-help">
-                  Total: {searchParams.n_puntos ** 2} puntos iniciales
+                  Total: {Math.pow(nPuntos, 2)} puntos iniciales
                 </small>
               </label>
             </div>
@@ -184,11 +224,11 @@ const RootsSearch = ({ onSearch, loading }) => {
                     min="0.01"
                     max="0.2"
                     step="0.01"
-                    value={searchParams.distancia_minima}
+                    value={distanciaMinima}
                     onChange={handleChange}
                     className="slider"
                   />
-                  <span className="slider-value">{searchParams.distancia_minima.toFixed(2)}</span>
+                  <span className="slider-value">{distanciaMinima.toFixed(2)}</span>
                 </div>
                 <small className="parameter-help">
                   Raíces más cercanas se consideran iguales
@@ -216,13 +256,13 @@ const RootsSearch = ({ onSearch, loading }) => {
               <div className="info-item">
                 <span className="info-label">Tiempo estimado:</span>
                 <span className="info-value">
-                  ~{(searchParams.n_puntos ** 2 * 0.05).toFixed(1)} segundos
+                  ~{(Math.pow(nPuntos, 2) * 0.05).toFixed(1)} segundos
                 </span>
               </div>
               <div className="info-item">
                 <span className="info-label">Puntos a procesar:</span>
                 <span className="info-value">
-                  {searchParams.n_puntos ** 2} puntos
+                  {Math.pow(nPuntos, 2)} puntos
                 </span>
               </div>
             </div>

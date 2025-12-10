@@ -1,8 +1,26 @@
 import React from 'react';
+import { FaInfoCircle, FaPlay, FaGraduationCap } from 'react-icons/fa';
 import './ExamplesPanel.css';
 
 const ExamplesPanel = ({ examples, onLoadExample }) => {
   const defaultExamples = [
+    {
+      nombre: 'EJEMPLO BÁSICO: Método de la Secante',
+      expresion: 'z**2 - 4',
+      descripcion: 'Ejemplo didáctico: Buscando raíz de f(z)=z²-4. Raíz real en z=2',
+      dificultad: 'baja',
+      explicacion: `FÓRMULA: zₙ₊₁ = zₙ - f(zₙ) * (zₙ - zₙ₋₁) / (f(zₙ) - f(zₙ₋₁))
+
+Pasos:
+1. z₀ = 1, z₁ = 3
+2. f(z₀) = 1² - 4 = -3
+3. f(z₁) = 3² - 4 = 5
+4. z₂ = 3 - 5*(3-1)/(5-(-3)) = 3 - 5*2/8 = 2
+5. Error = |f(2)| = 0`,
+      puntos_iniciales: [
+        { x0: [1.0, 0.0], x1: [3.0, 0.0] }
+      ]
+    },
     {
       nombre: 'Raíces Cúbicas de la Unidad',
       expresion: 'z**3 - 1',
@@ -50,20 +68,31 @@ const ExamplesPanel = ({ examples, onLoadExample }) => {
   return (
     <div className="examples-panel">
       <div className="panel-header">
-        <h3>Ejemplos Predefinidos</h3>
+        <h3>
+          <FaGraduationCap />
+          Ejemplos Predefinidos
+        </h3>
         <p className="panel-subtitle">
-          Selecciona un ejemplo para cargarlo en el solver
+          Selecciona un ejemplo para cargarlo en el solver. Recomendado: <strong>Ejemplo Básico</strong> para aprender el método.
         </p>
       </div>
 
       <div className="examples-grid">
         {examplesToShow.map((example, index) => (
-          <div key={index} className="example-card">
+          <div key={index} className={`example-card ${index === 0 ? 'featured-example' : ''}`}>
             <div className="example-header">
-              <h4 className="example-title">{example.nombre}</h4>
-              <span className={`difficulty-badge difficulty-${example.dificultad}`}>
-                {example.dificultad}
-              </span>
+              <div className="example-title-section">
+                <h4 className="example-title">{example.nombre}</h4>
+                <span className={`difficulty-badge difficulty-${example.dificultad}`}>
+                  {example.dificultad}
+                </span>
+              </div>
+              {index === 0 && (
+                <div className="featured-badge">
+                  <FaInfoCircle />
+                  <span>Recomendado para aprender</span>
+                </div>
+              )}
             </div>
             
             <div className="example-body">
@@ -73,6 +102,16 @@ const ExamplesPanel = ({ examples, onLoadExample }) => {
               </div>
               
               <p className="example-description">{example.descripcion}</p>
+              
+              {example.explicacion && (
+                <div className="example-explanation">
+                  <h5>
+                    <FaInfoCircle />
+                    Explicación Paso a Paso
+                  </h5>
+                  <pre className="explanation-text">{example.explicacion}</pre>
+                </div>
+              )}
               
               <div className="example-puntos">
                 <h5>Puntos iniciales sugeridos:</h5>
@@ -102,11 +141,42 @@ const ExamplesPanel = ({ examples, onLoadExample }) => {
                 className="load-example-btn"
                 onClick={() => onLoadExample(example)}
               >
-                Cargar este ejemplo
+                <FaPlay />
+                <span>Cargar este ejemplo</span>
               </button>
+              <div className="example-tip">
+                {index === 0 ? 
+                  "Ideal para entender cómo funciona el método de la secante" :
+                  "Perfecto para probar diferentes comportamientos del método"}
+              </div>
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="examples-tips">
+        <h4>
+          <FaInfoCircle />
+          Consejos para usar los ejemplos
+        </h4>
+        <div className="tips-grid">
+          <div className="tip-card">
+            <h5>Para principiantes</h5>
+            <p>Comienza con el <strong>Ejemplo Básico</strong> para entender el método paso a paso.</p>
+          </div>
+          <div className="tip-card">
+            <h5>Para explorar raíces complejas</h5>
+            <p>Usa <strong>Raíces Cúbicas de la Unidad</strong> para ver convergencia a raíces complejas.</p>
+          </div>
+          <div className="tip-card">
+            <h5>Para funciones no lineales</h5>
+            <p>Prueba <strong>Función Seno Compleja</strong> para ver comportamiento oscilatorio.</p>
+          </div>
+          <div className="tip-card">
+            <h5>Para múltiples raíces</h5>
+            <p>Usa <strong>Polinomio de Grado 4</strong> para encontrar diferentes raíces desde distintos puntos iniciales.</p>
+          </div>
+        </div>
       </div>
     </div>
   );

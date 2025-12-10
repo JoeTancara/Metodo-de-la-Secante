@@ -24,18 +24,28 @@ warnings.filterwarnings('ignore')
 
 # DE FLOAT A NUMERO
 def convertir_a_numero(valor):
-    if isinstance(valor, (int, float)):
-        return valor
-    elif isinstance(valor, str):
-        try:
-            if '.' in valor or 'e' in valor.lower() or 'E' in valor.lower():
-                return float(valor)
-            else:
-                return int(valor)
-        except ValueError:
+    try:
+        if isinstance(valor, (int, float)):
+            if math.isnan(valor) or math.isinf(valor):
+                return 0.0
             return valor
-    else:
-        return valor
+        elif isinstance(valor, str):
+            if '.' in valor or 'e' in valor.lower() or 'E' in valor.lower():
+                result = float(valor)
+                if math.isnan(result) or math.isinf(result):
+                    return 0.0
+                return result
+            else:
+                result = int(valor)
+                return result
+        elif isinstance(valor, complex):
+            if math.isnan(valor.real) or math.isinf(valor.real) or math.isnan(valor.imag) or math.isinf(valor.imag):
+                return complex(0.0, 0.0)
+            return valor
+        else:
+            return 0.0
+    except:
+        return 0.0
 
 def convertir_datos_numericos(data):
     if isinstance(data, dict):
@@ -47,9 +57,9 @@ def convertir_datos_numericos(data):
         return [convertir_datos_numericos(item) for item in data]
     else:
         return convertir_a_numero(data)
-#CONVERTIMOS NUMERO COMPLETO A JSON
-def serializar_complex(z):
 
+# CONVERTIMOS NUMERO COMPLETO A JSON
+def serializar_complex(z):
     if isinstance(z, complex):
         return {'real': float(z.real), 'imag': float(z.imag)}
     elif hasattr(z, '__dict__'):
@@ -78,7 +88,6 @@ def resultado_a_json(resultado):
         except (ValueError, TypeError):
             return str(resultado)
 
-
 # MODELOS DE DATOS PARA LA API
 @dataclass
 class PuntoComplejo:
@@ -106,8 +115,14 @@ class ResultadoSecante:
     tiempo_ejecucion: float
     configuracion: Dict[str, Any]
     errores_iteracion: List[float]
+    errores_relativos: List[float]
+    ciclos_detectados: int
     tipo_convergencia: str
     ratio_convergencia: float
+    error_relativo_final: float
+    tasa_reduccion_error: float
+    velocidad_convergencia: float
+    orden_aproximado: float
     
     def to_dict(self):
         return {
@@ -120,8 +135,14 @@ class ResultadoSecante:
             'tiempo_ejecucion': float(self.tiempo_ejecucion),
             'configuracion': self.configuracion,
             'errores_iteracion': [float(e) for e in self.errores_iteracion],
+            'errores_relativos': [float(e) for e in self.errores_relativos],
+            'ciclos_detectados': int(self.ciclos_detectados),
             'tipo_convergencia': str(self.tipo_convergencia),
-            'ratio_convergencia': float(self.ratio_convergencia)
+            'ratio_convergencia': float(self.ratio_convergencia),
+            'error_relativo_final': float(self.error_relativo_final),
+            'tasa_reduccion_error': float(self.tasa_reduccion_error),
+            'velocidad_convergencia': float(self.velocidad_convergencia),
+            'orden_aproximado': float(self.orden_aproximado)
         }
 
 @dataclass
@@ -149,7 +170,6 @@ class Estudiante:
     carrera: str
     email: Optional[str] = None
     avatar_url: Optional[str] = None
-
 
 class SecanteComplejoAvanzado:
     def __init__(self, 
@@ -180,10 +200,36 @@ class SecanteComplejoAvanzado:
     
     def _parsear_funcion(self, expresion: str) -> Callable[[complex], complex]:
         try:
+            # Limpiar y validar expresión
+            expresion = expresion.strip()
+            
+            # Verificar caracteres peligrosos
+            caracteres_peligrosos = ['import', 'exec', 'eval', '__', 'open', 'file', 'system', 'subprocess']
+            for peligroso in caracteres_peligrosos:
+                if peligroso in expresion.lower():
+                    raise ValueError(f"Expresión contiene término no permitido: {peligroso}")
+            
+            # Reemplazar operadores
+            expr_limpia = expresion.replace('^', '**')
+            
+            # Asegurar que 'z' sea la variable
+            if 'z' not in expr_limpia:
+                expr_limpia = expr_limpia.replace('x', 'z').replace('X', 'z')
+            
             # Definir variable compleja
             z = symbols('z')
+            
             # Parsear expresión con sympy
-            expr_sympy = parse_expr(expresion.replace('^', '**'))
+            expr_sympy = parse_expr(expr_limpia)
+            
+            # Test con valores de prueba
+            test_values = [0, 1, -1, 1j, -1j, 2, -2]
+            for test_val in test_values:
+                try:
+                    expr_sympy.subs(z, test_val)
+                except Exception as e:
+                    raise ValueError(f"Función no evaluable en z={test_val}: {e}")
+            
             # Convertir a función lambda
             expr_lamdified = sp.lambdify(z, expr_sympy, modules=['numpy', 'cmath'])
             
@@ -197,25 +243,27 @@ class SecanteComplejoAvanzado:
                     
                     if isinstance(resultado, (int, float)):
                         return complex(resultado, 0.0)
-                    return resultado
-                    
-                except (ZeroDivisionError, OverflowError, ValueError) as e:
-                    logger.warning(f"Error evaluando función en z={z_val}: {e}")
-                    if isinstance(z_val, complex):
-                        z_perturbado = complex(z_val.real, z_val.imag + 1e-15)
+                    elif isinstance(resultado, complex):
+                        return resultado
                     else:
-                        z_perturbado = complex(z_val, 1e-15)
-                    
+                        # Intentar convertir otros tipos
+                        return complex(float(resultado), 0.0)
+                        
+                except (ZeroDivisionError, OverflowError, ValueError, TypeError) as e:
+                    logger.warning(f"Error evaluando función en z={z_val}: {e}")
+                    # Perturbación pequeña para evitar singularidades
+                    perturbacion = complex(1e-15, 1e-15)
                     try:
-                        return expr_lamdified(z_perturbado)
+                        return expr_lamdified(z_val + perturbacion)
                     except:
+                        # Valor por defecto seguro
                         return complex(np.nan, np.nan)
             
             return funcion_segura
             
         except Exception as e:
             logger.error(f"Error parseando función {expresion}: {e}")
-            raise ValueError(f"No se pudo parsear la función: {expresion}")
+            raise ValueError(f"No se pudo parsear la función: {expresion}. Error: {str(e)}")
     
     def _configurar_estrategias(self):
         self.estrategias = {
@@ -334,16 +382,13 @@ class SecanteComplejoAvanzado:
                         id_ejecucion: Optional[str] = None) -> Dict[str, Any]:
         # VALIDACIÓN Y CONVERSIÓN ROBUSTA DE PARÁMETROS
         try:
-            x0_real = float(x0_real)
-            x0_imag = float(x0_imag)
-            x1_real = float(x1_real)
-            x1_imag = float(x1_imag)
-        except (ValueError, TypeError) as e:
-            logger.error(f"Error convirtiendo parámetros a float: {e}")
-            raise ValueError(f"Parámetros inválidos: {x0_real}, {x0_imag}, {x1_real}, {x1_imag}")
-        
-        if any(math.isnan(val) or math.isinf(val) for val in [x0_real, x0_imag, x1_real, x1_imag]):
-            raise ValueError("Los puntos iniciales contienen valores no válidos")
+            x0_real = float(x0_real) if not (math.isnan(float(x0_real)) or math.isinf(float(x0_real))) else 0.5
+            x0_imag = float(x0_imag) if not (math.isnan(float(x0_imag)) or math.isinf(float(x0_imag))) else 0.5
+            x1_real = float(x1_real) if not (math.isnan(float(x1_real)) or math.isinf(float(x1_real))) else 1.0
+            x1_imag = float(x1_imag) if not (math.isnan(float(x1_imag)) or math.isinf(float(x1_imag))) else 0.0
+        except (ValueError, TypeError):
+            # Valores por defecto seguros
+            x0_real, x0_imag, x1_real, x1_imag = 0.5, 0.5, 1.0, 0.0
         
         inicio = time.time()
         
@@ -361,9 +406,12 @@ class SecanteComplejoAvanzado:
         # Inicializar estructuras de seguimiento
         trayectoria = [PuntoComplejo.from_complex(x0), PuntoComplejo.from_complex(x1)]
         errores = [float(abs(fx0)), float(abs(fx1))]
+        errores_relativos = []
+        ciclos_detectados = 0
         convergio = False
         raiz_final = x1
         iteracion_final = 0
+        
         # Estrategia seleccionada
         estrategia_func = self.estrategias.get(self.estrategia_ciclos, 
                                               self._estrategia_perturbacion_hibrida)
@@ -375,49 +423,78 @@ class SecanteComplejoAvanzado:
             
             # Verificar división por cero
             denominador = fx1 - fx0
+            
             if abs(denominador) < 1e-15:
+                # Mejor manejo de división por cero
                 if self.usar_derivada_numerica:
-                    derivada = self._calcular_derivada_numerica(self.funcion, x1)
-                    if abs(derivada) > 1e-15:
-                        x_next = x1 - fx1 / derivada
-                    else:
-                        x_next = (x0 + x1) / 2 + complex(
-                            np.random.uniform(-0.1, 0.1),
-                            np.random.uniform(-0.1, 0.1)
-                        )
+                    try:
+                        derivada = self._calcular_derivada_numerica(self.funcion, x1)
+                        if abs(derivada) > 1e-15:
+                            x_next = x1 - fx1 / derivada
+                        else:
+                            # Método de bisección modificado para complejos
+                            x_next = (x0 + x1) / 2
+                    except:
+                        x_next = (x0 + x1) / 2
                 else:
-                    x_next = (x0 + x1) / 2 + complex(
-                        np.random.uniform(-0.01, 0.01),
-                        np.random.uniform(-0.01, 0.01)
-                    )
+                    # Pequeña perturbación compleja
+                    angulo = np.random.uniform(0, 2*np.pi)
+                    perturbacion = cmath.rect(1e-8, angulo)
+                    x_next = (x0 + x1) / 2 + perturbacion
             else:
                 # Método de la secante estándar
                 x_next = x1 - fx1 * (x1 - x0) / denominador
             
             # Evaluar función en nuevo punto
             fx_next = self.funcion(x_next)
+            
             # Guardar información
             trayectoria.append(PuntoComplejo.from_complex(x_next))
             error_actual = float(abs(fx_next))
             errores.append(error_actual)
+            
+            # Calcular error relativo si hay raíz de referencia
+            if k > 0:
+                if abs(raiz_final) > 1e-15:
+                    error_relativo = abs((x_next - raiz_final) / raiz_final)
+                else:
+                    error_relativo = abs(x_next - raiz_final)
+                errores_relativos.append(float(error_relativo))
+            
             # Verificar convergencia
             if error_actual < self.tol:
                 convergio = True
                 raiz_final = x_next
                 iteracion_final = k
                 break
+            
             # Detectar ciclos o estancamiento
             if k > 10 and self._detectar_ciclo(errores):
+                ciclos_detectados += 1
                 logger.info(f"Ciclo detectado en iteración {k}, aplicando estrategia")
                 x0, x1, fx0, fx1 = self._estrategia_reset(x0, x1, fx0, fx1, k)
                 continue
+            
             # Preparar siguiente iteración
             x0, x1 = x1, x_next
             fx0, fx1 = fx1, fx_next
+        
         # Calcular tiempo y preparar resultados
         tiempo_total = time.time() - inicio
+        
+        # Calcular estadísticas adicionales
+        tasa_reduccion_error = 0
+        velocidad_convergencia = 0
+        
+        if len(errores) > 1 and errores[-1] > 0:
+            tasa_reduccion_error = errores[0] / errores[-1]
+        
+        if iteracion_final > 0 and errores[0] > 0 and errores[-1] > 0:
+            velocidad_convergencia = iteracion_final / np.log(errores[0]/errores[-1])
+        
         # Análisis de convergencia
         analisis_convergencia = self._analizar_convergencia(errores, trayectoria)
+        
         # Crear resultado
         resultado = ResultadoSecante(
             id_ejecucion=id_ejecucion,
@@ -435,8 +512,14 @@ class SecanteComplejoAvanzado:
                 'usar_derivada_numerica': self.usar_derivada_numerica
             },
             errores_iteracion=[float(e) for e in errores],
+            errores_relativos=errores_relativos,
+            ciclos_detectados=ciclos_detectados,
             tipo_convergencia=analisis_convergencia['tipo'],
-            ratio_convergencia=float(analisis_convergencia['ratio_promedio'])
+            ratio_convergencia=float(analisis_convergencia['ratio_promedio']),
+            error_relativo_final=float(errores_relativos[-1]) if errores_relativos else 0.0,
+            tasa_reduccion_error=float(tasa_reduccion_error),
+            velocidad_convergencia=float(velocidad_convergencia),
+            orden_aproximado=float(analisis_convergencia.get('orden_estimado', 1.0))
         )
         
         self.historial_ejecuciones.append(resultado)
@@ -444,6 +527,7 @@ class SecanteComplejoAvanzado:
         if convergio:
             self.estadisticas['convergencias_exitosas'] += 1
             self._registrar_raiz_unica(resultado.raiz)
+        
         # Calcular tiempo promedio
         tiempos = [r.tiempo_ejecucion for r in self.historial_ejecuciones]
         self.estadisticas['tiempo_promedio'] = float(np.mean(tiempos) if tiempos else 0.0)
@@ -454,28 +538,39 @@ class SecanteComplejoAvanzado:
                               trayectoria: List[PuntoComplejo]) -> Dict[str, Any]:
         """Analiza el tipo y velocidad de convergencia."""
         if len(errores) < 4:
-            return {'tipo': 'insuficientes_datos', 'ratio_promedio': 0.0}
+            return {'tipo': 'insuficientes_datos', 'ratio_promedio': 0.0, 'orden_estimado': 1.0}
         
         ratios = []
+        ordenes = []
+        
         for i in range(2, len(errores) - 1):
-            if errores[i-1] > 0 and errores[i] > 0:
+            if errores[i-1] > 0 and errores[i] > 0 and errores[i-2] > 0:
                 try:
+                    # Ratio de convergencia
                     ratio = abs(np.log(errores[i]) / np.log(errores[i-1]))
                     ratios.append(float(ratio))
+                    
+                    # Estimación del orden de convergencia (método secante ~1.618)
+                    if errores[i-1] > 0 and errores[i-2] > 0:
+                        orden = np.log(abs(errores[i] / errores[i-1])) / np.log(abs(errores[i-1] / errores[i-2]))
+                        if not math.isnan(orden) and not math.isinf(orden):
+                            ordenes.append(float(orden))
                 except:
                     continue
         
         if not ratios:
-            return {'tipo': 'no_determinado', 'ratio_promedio': 0.0}
+            return {'tipo': 'no_determinado', 'ratio_promedio': 0.0, 'orden_estimado': 1.0}
         
-        ratio_promedio = float(np.mean(ratios))
+        ratio_promedio = float(np.mean(ratios)) if ratios else 0.0
+        orden_estimado = float(np.mean(ordenes)) if ordenes else 1.0
         
-        if ratio_promedio < 1.1:
-            tipo = 'lineal'
-        elif 1.1 <= ratio_promedio < 1.62:
-            tipo = 'superlineal'
-        elif 1.62 <= ratio_promedio < 1.8:
+        # Clasificación basada en ratio y orden
+        if orden_estimado >= 1.5 and orden_estimado < 1.7:
             tipo = 'cuadrática_aproximada'
+        elif orden_estimado >= 1.1:
+            tipo = 'superlineal'
+        elif orden_estimado > 0.8:
+            tipo = 'lineal'
         else:
             tipo = 'lenta_o_divergente'
         
@@ -487,13 +582,14 @@ class SecanteComplejoAvanzado:
         return {
             'tipo': tipo,
             'ratio_promedio': ratio_promedio,
+            'orden_estimado': orden_estimado,
             'ratios_individuales': ratios,
+            'ordenes_individuales': ordenes,
             'error_inicial': float(errores[0]),
             'error_final': float(errores[-1])
         }
     
     def _analizar_oscilaciones(self, trayectoria: List[PuntoComplejo]) -> int:
-        """Analiza oscilaciones en la trayectoria."""
         if len(trayectoria) < 3:
             return 0
         
@@ -519,7 +615,6 @@ class SecanteComplejoAvanzado:
     
     def _registrar_raiz_unica(self, raiz: PuntoComplejo, 
                             distancia_minima: float = 0.01) -> bool:
-        """Registra una raíz única, evitando duplicados."""
         for raiz_existente in self.raices_encontradas:
             distancia = abs(complex(raiz.real, raiz.imag) - 
                           complex(raiz_existente['raiz'].real, raiz_existente['raiz'].imag))
@@ -586,6 +681,7 @@ class SecanteComplejoAvanzado:
                         'imag': raiz_imag,
                         'error': float(resultado['error_final']),
                         'iteraciones': int(resultado['iteraciones']),
+                        'ciclos_detectados': int(resultado['ciclos_detectados']),
                         'veces_encontrada': 1
                     })
             
@@ -614,6 +710,7 @@ class SecanteComplejoAvanzado:
                 'imag': float(raiz['imag']),
                 'error': float(raiz['error']),
                 'iteraciones': int(raiz['iteraciones']),
+                'ciclos_detectados': int(raiz['ciclos_detectados']),
                 'veces_encontrada': int(raiz['veces_encontrada']),
                 'magnitud': float(abs(complex(raiz['real'], raiz['imag'])))
             })
@@ -705,6 +802,7 @@ class SecanteComplejoAvanzado:
             }
             
             resultados.extend([r.to_dict() for r in resultados_nivel])
+        
         sensibilidad_global = float(np.mean([s['sensibilidad_promedio'] 
                                       for s in estadisticas_nivel.values()]))
         
@@ -767,6 +865,7 @@ class SecanteComplejoAvanzado:
                 ax1.arrow(reales[i], imaginarios[i], dx*0.8, dy*0.8,
                          head_width=0.05, head_length=0.1, fc='blue', 
                          ec='blue', alpha=0.5)
+            
             # Configurar 
             if region:
                 x_min, x_max = float(region['x_min']), float(region['x_max'])
@@ -783,6 +882,7 @@ class SecanteComplejoAvanzado:
             ax1.grid(True, alpha=0.3)
             ax1.legend()
             ax1.axis('equal')
+            
             # Gráfico 2 ==>> convergencia del error
             ax2 = axes[1]
             # errores
@@ -803,6 +903,7 @@ class SecanteComplejoAvanzado:
             ax2.set_title('Convergencia del Error', fontsize=14, fontweight='bold')
             ax2.grid(True, alpha=0.3)
             ax2.legend()
+            
             # Anotar información de convergencia
             if len(errores) > 1:
                 ax2.text(0.05, 0.95, 
@@ -834,6 +935,7 @@ class SecanteComplejoAvanzado:
         
         if not resultado:
             raise ValueError(f"Resultado con ID {resultado_id} no encontrado")
+        
         img_base64 = self.generar_visualizacion_trayectoria(
             resultado.trayectoria,
             resultado.raiz,
@@ -851,15 +953,21 @@ class SecanteComplejoAvanzado:
                 'error_final': resultado.error_final,
                 'tiempo_ejecucion': resultado.tiempo_ejecucion,
                 'tipo_convergencia': resultado.tipo_convergencia,
-                'ratio_convergencia': resultado.ratio_convergencia
+                'ratio_convergencia': resultado.ratio_convergencia,
+                'ciclos_detectados': resultado.ciclos_detectados,
+                'error_relativo_final': resultado.error_relativo_final,
+                'tasa_reduccion_error': resultado.tasa_reduccion_error
             },
             'analisis_convergencia': {
                 'errores_por_iteracion': resultado.errores_iteracion,
+                'errores_relativos': resultado.errores_relativos,
                 'trayectoria': [p.to_dict() for p in resultado.trayectoria],
                 'longitud_trayectoria': len(resultado.trayectoria)
             },
             'visualizacion_base64': img_base64,
-            'recomendaciones': self._generar_recomendaciones(resultado)
+            'recomendaciones': self._generar_recomendaciones(resultado),
+            'formula_secante': "zₙ₊₁ = zₙ - f(zₙ) * (zₙ - zₙ₋₁) / (f(zₙ) - f(zₙ₋₁))",
+            'condicion_metodo': "f(zₙ) ≠ f(zₙ₋₁) (evitar división por cero)"
         }
         
         return informe
@@ -884,6 +992,12 @@ class SecanteComplejoAvanzado:
         if 'oscilaciones' in resultado.tipo_convergencia:
             recomendaciones.append("Se detectaron oscilaciones, usar estrategia 'reset' o 'hibrido'")
         
+        if resultado.ciclos_detectados > 0:
+            recomendaciones.append(f"Se detectaron {resultado.ciclos_detectados} ciclos, considerar cambiar estrategia")
+        
+        if resultado.error_relativo_final > 0.01:
+            recomendaciones.append("Error relativo alto, considerar mayor precisión o mejores puntos iniciales")
+        
         return recomendaciones
     
     def generar_funcion_patologica(self, tipo: str, **params) -> Dict[str, Any]:
@@ -892,7 +1006,8 @@ class SecanteComplejoAvanzado:
             'oscilatoria': self._generar_oscilatoria,
             'no_suave': self._generar_no_suave,
             'multimodal': self._generar_multimodal,
-            'condicion_malo': self._generar_mal_condicionada
+            'condicion_malo': self._generar_mal_condicionada,
+            'ejemplo_basico': self._generar_ejemplo_basico
         }
         
         if tipo not in funciones:
@@ -980,6 +1095,35 @@ class SecanteComplejoAvanzado:
             'numero_condicion': float(condicion),
             'dificultad': 'muy_alta'
         }
+    
+    def _generar_ejemplo_basico(self, a: float = 1.0, b: float = 4.0) -> Tuple[str, str, Dict]:
+        expresion = f"z**2 - {b}"
+        descripcion = f"EJEMPLO BÁSICO: f(z) = z² - {b} (Raíces en z=±{np.sqrt(b):.2f})"
+        
+        return expresion, descripcion, {
+            'continua': True,
+            'diferenciable': True,
+            'oscilatoria': False,
+            'n_raices': 2,
+            'dificultad': 'baja',
+            'explicacion': f"""MÉTODO DE LA SECANTE - EJEMPLO PASO A PASO:
+
+Función: f(z) = z² - {b}
+
+FÓRMULA: zₙ₊₁ = zₙ - f(zₙ) * (zₙ - zₙ₋₁) / (f(zₙ) - f(zₙ₋₁))
+
+Pasos para encontrar la raíz positiva:
+1. Puntos iniciales: z₀ = 1.0, z₁ = 3.0
+2. f(z₀) = 1² - {b} = {1 - b}
+3. f(z₁) = 3² - {b} = {9 - b}
+4. Aplicar fórmula:
+   z₂ = 3 - ({9 - b}) * (3 - 1) / (({9 - b}) - ({1 - b}))
+   z₂ = 3 - ({9 - b}) * 2 / ({8})
+   z₂ = {3 - (9 - b) * 2 / 8}
+5. Error = |f(z₂)| = |({3 - (9 - b) * 2 / 8})² - {b}|
+   
+El método converge aproximadamente a z = {np.sqrt(b):.4f}"""
+        }
 
 app = Flask(__name__)
 CORS(app)
@@ -1012,6 +1156,7 @@ ESTUDIANTES = [
         avatar_url="https://avatars.githubusercontent.com/u/140029048?s=400&u=830ec0222edadebc3ac1d40f6d28f15a07eac13e&v=4"
     )
 ]
+
 # ENDPOINTS PARA LA API
 
 @app.route('/api/estudiantes', methods=['GET'])
@@ -1090,9 +1235,18 @@ def ejecutar_secante():
         
         resultado['visualizacion_base64'] = img_base64
         
+        # Agregar información educativa
+        resultado['formula_secante'] = "zₙ₊₁ = zₙ - f(zₙ) * (zₙ - zₙ₋₁) / (f(zₙ) - f(zₙ₋₁))"
+        resultado['condicion_metodo'] = "f(zₙ) ≠ f(zₙ₋₁) (evitar división por cero)"
+        
         return jsonify({
             'status': 'success',
-            'resultado': resultado
+            'resultado': resultado,
+            'metadata': {
+                'metodo': 'secante_complejo',
+                'version': '4.1',
+                'timestamp': time.time()
+            }
         })
     
     except Exception as e:
@@ -1253,10 +1407,28 @@ def obtener_informe(resultado_id):
             'status': 'error',
             'message': str(e)
         }), 404
+
 #EJEMPLOS PREDEFINIDOS
 @app.route('/api/ejemplos', methods=['GET'])
 def obtener_ejemplos():
     ejemplos = [
+        {
+            'nombre': 'EJEMPLO BÁSICO: Método de la Secante',
+            'expresion': 'z**2 - 4',
+            'descripcion': 'Ejemplo didáctico: Buscando raíz de f(z)=z²-4. Raíz real en z=2',
+            'dificultad': 'baja',
+            'explicacion': """FÓRMULA: zₙ₊₁ = zₙ - f(zₙ) * (zₙ - zₙ₋₁) / (f(zₙ) - f(zₙ₋₁))
+
+Pasos:
+1. z₀ = 1, z₁ = 3
+2. f(z₀) = 1² - 4 = -3
+3. f(z₁) = 3² - 4 = 5
+4. z₂ = 3 - 5*(3-1)/(5-(-3)) = 3 - 5*2/8 = 2
+5. Error = |f(2)| = 0""",
+            'puntos_iniciales': [
+                {'x0': [1.0, 0.0], 'x1': [3.0, 0.0]}
+            ]
+        },
         {
             'nombre': 'Raíces Cúbicas de la Unidad',
             'expresion': 'z**3 - 1',
@@ -1308,7 +1480,7 @@ def obtener_ejemplos():
 def salud():
     return jsonify({
         'status': 'ok',
-        'version': '4.0',
+        'version': '4.1',
         'servicio': 'Método de la Secante para Funciones Complejas',
         'endpoints': [
             '/api/estudiantes',
@@ -1320,9 +1492,50 @@ def salud():
             '/api/estadisticas',
             '/api/informe/<id>',
             '/api/ejemplos'
+        ],
+        'caracteristicas': [
+            'Error relativo y absoluto',
+            'Conteo de ciclos detectados',
+            'Análisis de convergencia mejorado',
+            'Ejemplos educativos',
+            'Validación robusta de entradas'
         ]
     })
 
+@app.route('/api/metodo-info', methods=['GET'])
+def obtener_info_metodo():
+    info = {
+        'nombre': 'Método de la Secante',
+        'formula': 'zₙ₊₁ = zₙ - f(zₙ) * (zₙ - zₙ₋₁) / (f(zₙ) - f(zₙ₋₁))',
+        'condicion': 'f(zₙ) ≠ f(zₙ₋₁) (evitar división por cero)',
+        'ventajas': [
+            'No requiere derivada de la función',
+            'Convergencia superlineal (~1.618)',
+            'Apropiado para funciones complejas',
+            'Simple de implementar'
+        ],
+        'desventajas': [
+            'Requiere dos puntos iniciales',
+            'Puede diverger si f(zₙ) ≈ f(zₙ₋₁)',
+            'Sensible a la elección de puntos iniciales',
+            'Puede caer en ciclos infinitos'
+        ],
+        'ejemplo_paso_a_paso': {
+            'funcion': 'f(z) = z² - 4',
+            'puntos_iniciales': 'z₀ = 1.0, z₁ = 3.0',
+            'pasos': [
+                'f(z₀) = 1² - 4 = -3',
+                'f(z₁) = 3² - 4 = 5',
+                'z₂ = 3 - 5*(3-1)/(5-(-3)) = 2',
+                'f(z₂) = 2² - 4 = 0 → CONVERGE'
+            ]
+        }
+    }
+    
+    return jsonify({
+        'status': 'success',
+        'info_metodo': info
+    })
 
 if __name__ == '__main__':
     logging.basicConfig(
@@ -1330,17 +1543,16 @@ if __name__ == '__main__':
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
-    # Cargar solver
+    # Cargar solver con ejemplo básico por defecto
     try:
         solver_global = SecanteComplejoAvanzado(
-            expresion_funcion='z**3 - 1',
+            expresion_funcion='z**2 - 4',
             tol=1e-12,
             max_iter=100,
             estrategia_ciclos='perturbacion_hibrida'
         )
-        print("Solver OK")
     except Exception as e:
-        print(f"Error en el solver: {e}")
+        print(f". Error inicializando solver: {e}")
     
     # servidor
     app.run(host='localhost', port=5000, debug=True)
