@@ -37,13 +37,13 @@ pip install -r requirements.txt
 
 Ejecutar servidor:
 ```bash
-python app.py
+python api.py
 ```
 
 ### 2. Frontend
 
 ```bash
-cd frontend
+cd frontend-ok
 npm install
 npm start
 ```
