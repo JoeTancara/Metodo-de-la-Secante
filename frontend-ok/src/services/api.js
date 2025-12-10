@@ -6,110 +6,74 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 50000, // 30 segundos timeout
+  timeout: 30000,
 });
 
-// Interceptor para manejar errores globalmente
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    console.error('API Error:', error);
-    
-    if (error.response) {
-      // El servidor respondió con un código de error
-      console.error('Response data:', error.response.data);
-      console.error('Response status:', error.response.status);
-    } else if (error.request) {
-      // La petición fue hecha pero no hubo respuesta
-      console.error('No response received:', error.request);
-    } else {
-      // Error al configurar la petición
-      console.error('Request setup error:', error.message);
-    }
-    
-    return Promise.reject(error);
-  }
-);
+const seguroFloat = (valor, def = 0) => {
+  const num = parseFloat(valor);
+  return isNaN(num) ? def : num;
+};
+
+const seguroInt = (valor, def = 0) => {
+  const num = parseInt(valor);
+  return isNaN(num) ? def : num;
+};
 
 export const apiService = {
-  // Salud del servidor
   getHealth: () => api.get('/salud'),
   
-  // Estudiantes
   getStudents: () => api.get('/estudiantes'),
   
-  // Configurar solver
   configureSolver: (config) => {
-    // Validar configuración antes de enviar
-    const validatedConfig = {
+    return api.post('/configurar', {
       expresion_funcion: String(config.expresion_funcion || 'z**2 - 4'),
-      tol: parseFloat(config.tol) || 1e-12,
-      max_iter: parseInt(config.max_iter) || 100,
+      tol: seguroFloat(config.tol, 1e-12),
+      max_iter: seguroInt(config.max_iter, 100),
       estrategia_ciclos: String(config.estrategia_ciclos || 'perturbacion_hibrida'),
       usar_derivada_numerica: Boolean(config.usar_derivada_numerica || false)
-    };
-    
-    return api.post('/configurar', validatedConfig);
+    });
   },
   
-  // Ejecutar método
   executeSecante: (data) => {
-    const validatedData = {
-      x0_real: parseFloat(data.x0_real) || 0.5,
-      x0_imag: parseFloat(data.x0_imag) || 0.5,
-      x1_real: parseFloat(data.x1_real) || 1.0,
-      x1_imag: parseFloat(data.x1_imag) || 0.0,
+    return api.post('/ejecutar', {
+      x0_real: seguroFloat(data.x0_real, 0.5),
+      x0_imag: seguroFloat(data.x0_imag, 0.5),
+      x1_real: seguroFloat(data.x1_real, 1.0),
+      x1_imag: seguroFloat(data.x1_imag, 0.0),
       id_ejecucion: data.id_ejecucion || undefined
-    };
-    
-    return api.post('/ejecutar', validatedData);
+    });
   },
   
-  // Buscar raíces
   searchRoots: (data) => {
-    const validatedData = {
+    return api.post('/buscar-raices', {
       region: {
-        x_min: parseFloat(data.region.x_min) || -2,
-        x_max: parseFloat(data.region.x_max) || 2,
-        y_min: parseFloat(data.region.y_min) || -2,
-        y_max: parseFloat(data.region.y_max) || 2
+        x_min: seguroFloat(data.region.x_min, -2),
+        x_max: seguroFloat(data.region.x_max, 2),
+        y_min: seguroFloat(data.region.y_min, -2),
+        y_max: seguroFloat(data.region.y_max, 2)
       },
-      n_puntos: parseInt(data.n_puntos) || 20,
-      distancia_minima: parseFloat(data.distancia_minima) || 0.05,
+      n_puntos: seguroInt(data.n_puntos, 20),
+      distancia_minima: seguroFloat(data.distancia_minima, 0.05),
       paralelo: Boolean(data.paralelo || true)
-    };
-    
-    return api.post('/buscar-raices', validatedData);
+    });
   },
   
-  // Análisis de sensibilidad
   analyzeSensitivity: (data) => {
-    const validatedData = {
-      raiz_real: parseFloat(data.raiz_real) || 0,
-      raiz_imag: parseFloat(data.raiz_imag) || 0,
+    return api.post('/sensibilidad', {
+      raiz_real: seguroFloat(data.raiz_real, 0),
+      raiz_imag: seguroFloat(data.raiz_imag, 0),
       niveles_ruido: Array.isArray(data.niveles_ruido) 
-        ? data.niveles_ruido.map(n => parseFloat(n))
+        ? data.niveles_ruido.map(n => seguroFloat(n, 1e-9))
         : [1e-15, 1e-12, 1e-9, 1e-6, 1e-3],
-      muestras_por_nivel: parseInt(data.muestras_por_nivel) || 5
-    };
-    
-    return api.post('/sensibilidad', validatedData);
+      muestras_por_nivel: seguroInt(data.muestras_por_nivel, 5)
+    });
   },
   
-  // Funciones patológicas
-  generatePathologicalFunction: (data) => api.post('/funcion-patologica', data),
-  
-  // Estadísticas
   getStatistics: () => api.get('/estadisticas'),
   
-  // Informe
   getReport: (resultId) => api.get(`/informe/${resultId}`),
   
-  // Ejemplos
-  getExamples: () => api.get('/ejemplos'),
-  
-  // Info método
-  getMethodInfo: () => api.get('/api/metodo-info')
+  getExamples: () => api.get('/ejemplos')
 };
 
 export default apiService;

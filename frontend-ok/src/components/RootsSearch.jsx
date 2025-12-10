@@ -14,16 +14,14 @@ const RootsSearch = ({ onSearch, loading }) => {
     paralelo: true
   });
 
-  // Función segura para convertir a número
-  const safeParseFloat = (value) => {
-    if (typeof value === 'string') {
-      const parsed = parseFloat(value);
-      return isNaN(parsed) ? 0.05 : parsed;
-    }
-    if (typeof value === 'number') {
-      return value;
-    }
-    return 0.05; // valor por defecto
+  const seguroFloat = (valor, def = 0) => {
+    const num = parseFloat(valor);
+    return isNaN(num) ? def : num;
+  };
+
+  const seguroInt = (valor, def = 0) => {
+    const num = parseInt(valor);
+    return isNaN(num) ? def : num;
   };
 
   const handleChange = (e) => {
@@ -35,15 +33,15 @@ const RootsSearch = ({ onSearch, loading }) => {
         ...prev,
         [parent]: {
           ...prev[parent],
-          [child]: safeParseFloat(value)
+          [child]: seguroFloat(value)
         }
       }));
     } else {
       const processedValue = type === 'checkbox' 
         ? checked 
         : type === 'number' 
-          ? safeParseFloat(value) 
-          : value;
+          ? seguroFloat(value) 
+          : seguroInt(value);
       
       setSearchParams(prev => ({
         ...prev,
@@ -55,16 +53,15 @@ const RootsSearch = ({ onSearch, loading }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Validar y convertir todos los valores antes de enviar
     const validatedParams = {
       region: {
-        x_min: safeParseFloat(searchParams.region.x_min),
-        x_max: safeParseFloat(searchParams.region.x_max),
-        y_min: safeParseFloat(searchParams.region.y_min),
-        y_max: safeParseFloat(searchParams.region.y_max)
+        x_min: seguroFloat(searchParams.region.x_min),
+        x_max: seguroFloat(searchParams.region.x_max),
+        y_min: seguroFloat(searchParams.region.y_min),
+        y_max: seguroFloat(searchParams.region.y_max)
       },
-      n_puntos: parseInt(searchParams.n_puntos) || 20,
-      distancia_minima: safeParseFloat(searchParams.distancia_minima),
+      n_puntos: seguroInt(searchParams.n_puntos),
+      distancia_minima: seguroFloat(searchParams.distancia_minima),
       paralelo: Boolean(searchParams.paralelo)
     };
     
@@ -75,10 +72,10 @@ const RootsSearch = ({ onSearch, loading }) => {
     setSearchParams(prev => ({
       ...prev,
       region: {
-        x_min: safeParseFloat(preset.x_min),
-        x_max: safeParseFloat(preset.x_max),
-        y_min: safeParseFloat(preset.y_min),
-        y_max: safeParseFloat(preset.y_max)
+        x_min: seguroFloat(preset.x_min),
+        x_max: seguroFloat(preset.x_max),
+        y_min: seguroFloat(preset.y_min),
+        y_max: seguroFloat(preset.y_max)
       }
     }));
   };
@@ -87,12 +84,11 @@ const RootsSearch = ({ onSearch, loading }) => {
     { label: 'Cuadrado [-2, 2]', value: { x_min: -2, x_max: 2, y_min: -2, y_max: 2 } },
     { label: 'Círculo unidad', value: { x_min: -1.5, x_max: 1.5, y_min: -1.5, y_max: 1.5 } },
     { label: 'Mitad derecha', value: { x_min: 0, x_max: 3, y_min: -1.5, y_max: 1.5 } },
-    { label: 'Mitad superior', value: { x_min: -1.5, x_max: 1.5, y_min: 0, y_max: 2 } },
   ];
 
-  // Asegurar que distancia_minima sea número para toFixed
-  const distanciaMinima = safeParseFloat(searchParams.distancia_minima);
-  const nPuntos = parseInt(searchParams.n_puntos) || 20;
+  const distanciaMinima = seguroFloat(searchParams.distancia_minima);
+  const nPuntos = seguroInt(searchParams.n_puntos);
+  const totalPuntos = Math.pow(nPuntos, 2);
 
   return (
     <div className="roots-search">
@@ -167,26 +163,6 @@ const RootsSearch = ({ onSearch, loading }) => {
                 />
               </div>
             </div>
-            
-            <div className="region-visualization">
-              <div className="coordinate-plane">
-                <div className="plane-grid">
-                  <div className="grid-line horizontal"></div>
-                  <div className="grid-line vertical"></div>
-                  <div className="origin">(0,0)</div>
-                  <div className="region-box"
-                    style={{
-                      left: `${(searchParams.region.x_min + 3) / 6 * 100}%`,
-                      right: `${(3 - searchParams.region.x_max) / 6 * 100}%`,
-                      top: `${(searchParams.region.y_min + 3) / 6 * 100}%`,
-                      bottom: `${(3 - searchParams.region.y_max) / 6 * 100}%`
-                    }}
-                  >
-                    <span className="region-label">Región de búsqueda</span>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
 
           <div className="parameters-section">
@@ -209,7 +185,7 @@ const RootsSearch = ({ onSearch, loading }) => {
                   <span className="slider-value">{nPuntos}</span>
                 </div>
                 <small className="parameter-help">
-                  Total: {Math.pow(nPuntos, 2)} puntos iniciales
+                  Total: {totalPuntos} puntos iniciales
                 </small>
               </label>
             </div>
@@ -244,7 +220,6 @@ const RootsSearch = ({ onSearch, loading }) => {
                   checked={searchParams.paralelo}
                   onChange={handleChange}
                 />
-                <span className="checkbox-custom"></span>
                 Procesamiento paralelo
               </label>
               <small className="parameter-help">
@@ -256,13 +231,13 @@ const RootsSearch = ({ onSearch, loading }) => {
               <div className="info-item">
                 <span className="info-label">Tiempo estimado:</span>
                 <span className="info-value">
-                  ~{(Math.pow(nPuntos, 2) * 0.05).toFixed(1)} segundos
+                  ~{(totalPuntos * 0.05).toFixed(1)} segundos
                 </span>
               </div>
               <div className="info-item">
                 <span className="info-label">Puntos a procesar:</span>
                 <span className="info-value">
-                  {Math.pow(nPuntos, 2)} puntos
+                  {totalPuntos} puntos
                 </span>
               </div>
             </div>
@@ -281,10 +256,7 @@ const RootsSearch = ({ onSearch, loading }) => {
                 Buscando raíces...
               </>
             ) : (
-              <>
-                <span className="icon"></span>
-                Iniciar Búsqueda de Raíces
-              </>
+              'Iniciar Búsqueda de Raíces'
             )}
           </button>
           

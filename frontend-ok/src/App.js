@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaChartLine, FaSearch, FaCog, FaPlay, FaChartBar, FaBook, FaCalculator, FaUsers, FaCheckCircle, FaTimesCircle, FaInfoCircle } from 'react-icons/fa';
+import { FaChartLine, FaSearch, FaCog, FaPlay, FaChartBar, FaBook } from 'react-icons/fa';
 import Header from './components/Header';
 import FunctionInput from './components/FunctionInput';
 import ExecutionPanel from './components/ExecutionPanel';
@@ -13,7 +13,14 @@ import apiService from './services/api';
 import './styles/App.css';
 
 function App() {
-  const [currentConfig, setCurrentConfig] = useState(null);
+  const [currentConfig, setCurrentConfig] = useState({
+    expresion_funcion: 'z**2 - 4',
+    tol: 1e-12,
+    max_iter: 100,
+    estrategia_ciclos: 'perturbacion_hibrida',
+    usar_derivada_numerica: false
+  });
+  
   const [currentResult, setCurrentResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [students, setStudents] = useState([]);
@@ -25,28 +32,15 @@ function App() {
 
   useEffect(() => {
     checkApiHealth();
-    fetchStudents();
     fetchExamples();
   }, []);
 
   const checkApiHealth = async () => {
     try {
-      const response = await apiService.getHealth();
+      await apiService.getHealth();
       setApiStatus('connected');
-      console.log('  API conectada correctamente:', response.data);
     } catch (error) {
-      console.error('. Error conectando a la API:', error);
       setApiStatus('disconnected');
-      alert('No se pudo conectar a la API. Asegúrate de que el servidor esté ejecutándose en http://localhost:5000');
-    }
-  };
-
-  const fetchStudents = async () => {
-    try {
-      const response = await apiService.getStudents();
-      setStudents(response.data);
-    } catch (error) {
-      console.error('Error fetching students:', error);
     }
   };
 
@@ -59,37 +53,29 @@ function App() {
     }
   };
 
-const handleConfigure = async (config) => {
-  setLoading(true);
-  try {
-    const response = await apiService.configureSolver(config);
-    
-    // Guardar la configuración COMPLETA, no solo configuracion
-    setCurrentConfig({
-      expresion_funcion: config.expresion_funcion,
-      tol: config.tol,
-      max_iter: config.max_iter,
-      estrategia_ciclos: config.estrategia_ciclos,
-      usar_derivada_numerica: config.usar_derivada_numerica
-    });
-    
-    alert('Solver configurado exitosamente');
-  } catch (error) {
-    console.error('Error configuring solver:', error);
-    alert(`Error: ${error.response?.data?.message || error.message}`);
-  } finally {
-    setLoading(false);
-  }
-};
+  const handleConfigure = async (config) => {
+    setLoading(true);
+    try {
+      const response = await apiService.configureSolver(config);
+      // GUARDAR CONFIGURACIÓN COMPLETA
+      setCurrentConfig({
+        expresion_funcion: config.expresion_funcion,
+        tol: config.tol,
+        max_iter: config.max_iter,
+        estrategia_ciclos: config.estrategia_ciclos,
+        usar_derivada_numerica: config.usar_derivada_numerica
+      });
+      alert('Solver configurado exitosamente');
+    } catch (error) {
+      alert(`Error: ${error.response?.data?.message || error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleExecute = async (initialPoints) => {
     if (!currentConfig) {
       alert('Por favor, configura el solver primero');
-      return;
-    }
-
-    if (apiStatus !== 'connected') {
-      alert('No hay conexión con el servidor. Verifica que el backend esté corriendo.');
       return;
     }
 
@@ -105,29 +91,17 @@ const handleConfigure = async (config) => {
       }
       
     } catch (error) {
-      console.error('Error executing secante:', error);
-      
-      let errorMessage = '. Error en la ejecución: ';
-      if (error.response) {
-        errorMessage += error.response.data?.message || error.response.statusText;
-      } else if (error.request) {
-        errorMessage += 'No se recibió respuesta del servidor. Verifica que el backend esté corriendo.';
-      } else {
-        errorMessage += error.message;
-      }
-      
-      alert(errorMessage);
+      alert(`Error: ${error.response?.data?.message || error.message}`);
       
       setCurrentResult({
         raiz: { real: 0, imag: 0 },
         convergio: false,
         iteraciones: 0,
-        error_final: 1,
+        error_final: 1e-15,
         ciclos_detectados: 0,
         tipo_convergencia: 'error',
-        mensaje_error: errorMessage,
-        errores_iteracion: [1],
-        errores_relativos: [1],
+        errores_iteracion: [1e-15],
+        errores_relativos: [1e-15],
         trayectoria: [{real: 0, imag: 0}],
         configuracion: currentConfig
       });
@@ -148,8 +122,7 @@ const handleConfigure = async (config) => {
       setSearchResults(response.data.resultado);
       setActiveTab('searchResults');
     } catch (error) {
-      console.error('Error searching roots:', error);
-      alert(`. Error: ${error.response?.data?.message || error.message}`);
+      alert(`Error: ${error.response?.data?.message || error.message}`);
     } finally {
       setLoading(false);
     }
@@ -171,8 +144,7 @@ const handleConfigure = async (config) => {
       setSensitivityResults(response.data.resultado);
       setActiveTab('sensitivity');
     } catch (error) {
-      console.error('Error analyzing sensitivity:', error);
-      alert(`. Error: ${error.response?.data?.message || error.message}`);
+      alert(`Error: ${error.response?.data?.message || error.message}`);
     } finally {
       setLoading(false);
     }
@@ -186,16 +158,7 @@ const handleConfigure = async (config) => {
       estrategia_ciclos: 'perturbacion_hibrida',
       usar_derivada_numerica: false
     });
-    alert(`Solver Cargado OK`);
-  };
-
-  const handleViewMethodInfo = async () => {
-    try {
-      const response = await apiService.get('/api/metodo-info');
-      alert(`ℹ️ ${JSON.stringify(response.data.info_metodo, null, 2)}`);
-    } catch (error) {
-      console.error('Error fetching method info:', error);
-    }
+    alert(`Ejemplo "${example.nombre}" cargado.`);
   };
 
   return (
@@ -212,7 +175,6 @@ const handleConfigure = async (config) => {
         <div className="sidebar">
           <div className="sidebar-section">
             <h3 className="sidebar-title">
-              <FaCalculator className="sidebar-icon" />
               Navegación
             </h3>
             <div className="nav-menu">
@@ -258,53 +220,37 @@ const handleConfigure = async (config) => {
                 <FaBook />
                 <span>Ejemplos</span>
               </button>
-              <button
-                className="nav-btn info-btn"
-                onClick={handleViewMethodInfo}
-              >
-                <FaInfoCircle />
-                <span>Info del Método</span>
-              </button>
             </div>
           </div>
 
           <div className="sidebar-section">
             <h3 className="sidebar-title">
-              <FaCog className="sidebar-icon" />
               Estado del Solver
             </h3>
             <div className="solver-status">
               <div className="status-item">
                 <span className="status-label">Configurado:</span>
-                <span className={`status-value ${currentConfig ? 'active' : 'inactive'}`}>
-                  {currentConfig ? <FaCheckCircle /> : <FaTimesCircle />}
-                </span>
-              </div>
-              <div className="status-item">
-                <span className="status-label">Última ejecución:</span>
-                <span className="status-value">
-                  {currentResult ? <FaCheckCircle /> : 'No ejecutado'}
+                <span className="status-value active">
+                  ✓
                 </span>
               </div>
               <div className="status-item">
                 <span className="status-label">Conexión API:</span>
                 <span className={`status-value ${apiStatus === 'connected' ? 'active' : 'inactive'}`}>
-                  {apiStatus === 'connected' ? <FaCheckCircle /> : <FaTimesCircle />}
+                  {apiStatus === 'connected' ? '✓' : '✗'}
                 </span>
               </div>
-              {currentConfig && (
-                <div className="current-function-display">
-                  <span className="function-label">Función actual:</span>
-                  <code className="function-code">{currentConfig.expresion_funcion}</code>
-                </div>
-              )}
+            </div>
+            
+            <div className="current-function-display">
+              <span className="function-label">Función actual:</span>
+              <code className="function-code">{currentConfig.expresion_funcion}</code>
             </div>
           </div>
 
           {currentResult && (
             <div className="sidebar-section">
               <h3 className="sidebar-title">
-                <FaChartLine className="sidebar-icon" />
                 Último Resultado
               </h3>
               <div className="quick-stats">
@@ -344,7 +290,7 @@ const handleConfigure = async (config) => {
             <ExecutionPanel
               onExecute={handleExecute}
               loading={loading}
-              currentFunction={currentConfig?.expresion_funcion}
+              currentFunction={currentConfig.expresion_funcion}
             />
           )}
 
@@ -409,10 +355,6 @@ const handleConfigure = async (config) => {
                         <span className="label">Ciclos:</span>
                         <span className="value">{raiz.ciclos_detectados || 0}</span>
                       </div>
-                      <div className="info-item">
-                        <span className="label">Encontrada:</span>
-                        <span className="value">{raiz.veces_encontrada} veces</span>
-                      </div>
                     </div>
                   </div>
                 ))}
@@ -443,12 +385,6 @@ const handleConfigure = async (config) => {
               </div>
               <h3>No hay resultados para mostrar</h3>
               <p>Ejecuta el método de la secante para ver los resultados</p>
-              <button 
-                className="btn-primary"
-                onClick={() => setActiveTab('execution')}
-              >
-                Ir a Ejecución
-              </button>
             </div>
           )}
         </div>
@@ -459,9 +395,6 @@ const handleConfigure = async (config) => {
           <p>© 2025 Método de la Secante para Funciones Complejas - Análisis Numérico Avanzado</p>
           <p className="footer-info">
             Universidad Mayor de San Andres - Facultad de Ciencias Puras y Naturales - Métodos Numéricos INF-373
-          </p>
-          <p className="footer-version">
-            Versión 4.1 | Backend {apiStatus === 'connected' ? '  Conectado' : '. Desconectado'}
           </p>
         </div>
       </footer>
